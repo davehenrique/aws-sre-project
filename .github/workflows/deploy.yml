@@ -8,10 +8,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
+      # 🔐 Configurar AWS
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -19,23 +24,32 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # 🐳 Login no ECR
       - name: Login ECR
         run: |
           aws ecr get-login-password --region $AWS_REGION \
-          | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+          | docker login --username AWS --password-stdin $ECR_REPOSITORY
 
+      # 🐳 Build da imagem (AMD64)
       - name: Build Docker
         run: |
           docker buildx build --platform linux/amd64 -t sre-app --load ./app
 
+      # 🔖 Tag da imagem
       - name: Tag Image
         run: |
-          docker tag sre-app:latest ${{ secrets.ECR_REPOSITORY }}:latest
+          docker tag sre-app:latest $ECR_REPOSITORY:latest
 
+      # 📦 Push para ECR
       - name: Push Image
         run: |
-          docker push ${{ secrets.ECR_REPOSITORY }}:latest
+          docker push $ECR_REPOSITORY:latest
 
+      # 🔧 INSTALAR TERRAFORM (CORREÇÃO DO ERRO)
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      # 🚀 Deploy com Terraform
       - name: Terraform Apply
         working-directory: terraform
         run: |
