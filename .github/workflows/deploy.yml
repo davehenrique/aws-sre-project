@@ -4,6 +4,17 @@ on:
   push:
     branches: [ "main" ]
 
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose action"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -13,6 +24,7 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
 
     steps:
+      # 📥 Checkout do código
       - name: Checkout
         uses: actions/checkout@v3
 
@@ -30,7 +42,7 @@ jobs:
           aws ecr get-login-password --region $AWS_REGION \
           | docker login --username AWS --password-stdin $ECR_REPOSITORY
 
-      # 🐳 Build da imagem (AMD64)
+      # 🐳 Build Docker (AMD64)
       - name: Build Docker
         run: |
           docker buildx build --platform linux/amd64 -t sre-app --load ./app
@@ -45,13 +57,22 @@ jobs:
         run: |
           docker push $ECR_REPOSITORY:latest
 
-      # 🔧 INSTALAR TERRAFORM (CORREÇÃO DO ERRO)
+      # 🔧 Instalar Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
-      # 🚀 Deploy com Terraform
+      # 🚀 Terraform Apply (quando push OU botão apply)
       - name: Terraform Apply
+        if: ${{ github.event.inputs.action == 'apply' || github.event_name == 'push' }}
         working-directory: terraform
         run: |
           terraform init
           terraform apply -auto-approve
+
+      # 💣 Terraform Destroy (quando botão destroy)
+      - name: Terraform Destroy
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        working-directory: terraform
+        run: |
+          terraform init
+          terraform destroy -auto-approve
